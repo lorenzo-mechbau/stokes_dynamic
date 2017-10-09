@@ -1,52 +1,3 @@
-!> \file
-!> \author Sebastian Krittian
-!> \brief This is an example program to solve a dynamic Stokes equation using OpenCMISS calls.
-!>
-!> \section LICENSE
-!>
-!> Version: MPL 1.1/GPL 2.0/LGPL 2.1
-!>
-!> The contents of this file are subject to the Mozilla Public License
-!> Version 1.1 (the "License"); you may not use this file except in
-!> compliance with the License. You may obtain a copy of the License at
-!> http://www.mozilla.org/MPL/
-!>
-!> Software distributed under the License is distributed on an "AS IS"
-!> basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-!> License for the specific language governing rights and limitations
-!> under the License.
-!>
-!> The Original Code is OpenCMISS
-!>
-!> The Initial Developer of the Original Code is University of Auckland,
-!> Auckland, New Zealand and University of Oxford, Oxford, United
-!> Kingdom. Portions created by the University of Auckland and University
-!> of Oxford are Copyright (C) 2007 by the University of Auckland and
-!> the University of Oxford. All Rights Reserved.
-!>
-!> Contributor(s):
-!>
-!> Alternatively, the contents of this file may be used under the terms of
-!> either the GNU General Public License Version 2 or later (the "GPL"), or
-!> the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-!> in which case the provisions of the GPL or the LGPL are applicable instead
-!> of those above. If you wish to allow use of your version of this file only
-!> under the terms of either the GPL or the LGPL, and not to allow others to
-!> use your version of this file under the terms of the MPL, indicate your
-!> decision by deleting the provisions above and replace them with the notice
-!> and other provisions required by the GPL or the LGPL. If you do not delete
-!> the provisions above, a recipient may use your version of this file under
-!> the terms of any one of the MPL, the GPL or the LGPL.
-!>
-
-!> \example FluidMechanics/Stokes/RoutineCheck/Dynamic/src/DynamicExample.f90
-!! Example program to solve a dynamic Stokes equation using OpenCMISS calls.
-!! \htmlinclude FluidMechanics/Stokes/RoutineCheck/Dynamic/history.html
-!!
-!<
-
-!> Main program
-
 PROGRAM STOKESDYNAMICEXAMPLE
 
   !
@@ -57,13 +8,8 @@ PROGRAM STOKESDYNAMICEXAMPLE
 
   USE OpenCMISS
   USE OpenCMISS_Iron
-  USE FLUID_MECHANICS_IO_ROUTINES
 #ifndef NOMPIMOD
   USE MPI
-#endif
-
-#ifdef WIN32
-  USE IFQWINCMISS
 #endif
 
   !
@@ -78,6 +24,10 @@ PROGRAM STOKESDYNAMICEXAMPLE
 #include "mpif.h"
 #endif
 
+  !Test program parameters
+  REAL(CMISSRP), PARAMETER :: HEIGHT=1.0_CMISSRP
+  REAL(CMISSRP), PARAMETER :: WIDTH=1.0_CMISSRP
+  REAL(CMISSRP), PARAMETER :: LENGTH=1.0_CMISSRP
 
   !Test program parameters
 
@@ -91,6 +41,7 @@ PROGRAM STOKESDYNAMICEXAMPLE
   INTEGER(CMISSIntg), PARAMETER :: MaterialsFieldUserNumberStokes=8
   INTEGER(CMISSIntg), PARAMETER :: EquationsSetUserNumberStokes=9
   INTEGER(CMISSIntg), PARAMETER :: ProblemUserNumber=10
+  INTEGER(CMISSIntg), PARAMETER :: GeneratedMeshUserNumber=11
 
   INTEGER(CMISSIntg), PARAMETER :: DomainUserNumber=2
   INTEGER(CMISSIntg), PARAMETER :: SolverStokesUserNumber=1
@@ -98,13 +49,10 @@ PROGRAM STOKESDYNAMICEXAMPLE
   INTEGER(CMISSIntg), PARAMETER :: MaterialsFieldUserNumberStokesRho=2
 
   !Program types
-
-  TYPE(EXPORT_CONTAINER):: CM
-
   !Program variables
 
   INTEGER(CMISSIntg) :: NUMBER_OF_DIMENSIONS
-  
+  INTEGER(CMISSIntg) :: NUMBER_GLOBAL_X_ELEMENTS,NUMBER_GLOBAL_Y_ELEMENTS,NUMBER_GLOBAL_Z_ELEMENTS
   INTEGER(CMISSIntg) :: BASIS_TYPE
   INTEGER(CMISSIntg) :: BASIS_NUMBER_SPACE
   INTEGER(CMISSIntg) :: BASIS_NUMBER_VELOCITY
@@ -147,7 +95,6 @@ PROGRAM STOKESDYNAMICEXAMPLE
   INTEGER, ALLOCATABLE, DIMENSION(:):: FIXED_WALL_NODES_STOKES
   INTEGER, ALLOCATABLE, DIMENSION(:):: INLET_WALL_NODES_STOKES
 
-
   REAL(CMISSRP) :: INITIAL_FIELD_STOKES(3)
   REAL(CMISSRP) :: BOUNDARY_CONDITIONS_STOKES(3)
   REAL(CMISSRP) :: DIVERGENCE_TOLERANCE
@@ -177,7 +124,7 @@ PROGRAM STOKESDYNAMICEXAMPLE
   TYPE(cmfe_CoordinateSystemType) :: CoordinateSystem
   TYPE(cmfe_CoordinateSystemType) :: WorldCoordinateSystem
   !Basis
-  TYPE(cmfe_BasisType) :: BasisSpace
+  TYPE(cmfe_BasisType) :: BasisGeometry
   TYPE(cmfe_BasisType) :: BasisVelocity
   TYPE(cmfe_BasisType) :: BasisPressure
   !Nodes
@@ -188,6 +135,7 @@ PROGRAM STOKESDYNAMICEXAMPLE
   TYPE(cmfe_MeshElementsType) :: MeshElementsPressure
   !Meshes
   TYPE(cmfe_MeshType) :: Mesh
+  TYPE(cmfe_GeneratedMeshType) :: GeneratedMesh
   !Decompositions
   TYPE(cmfe_DecompositionType) :: Decomposition
   !Fields
@@ -213,28 +161,11 @@ PROGRAM STOKESDYNAMICEXAMPLE
   !Solver equations
   TYPE(cmfe_SolverEquationsType) :: SolverEquationsStokes
 
-#ifdef WIN32
-  !Quickwin type
-  LOGICAL :: QUICKWIN_STATUS=.FALSE.
-  TYPE(WINDOWCONFIG) :: QUICKWIN_WINDOW_CONFIG
-#endif
-  
   !Generic CMISS variables
 
   INTEGER(CMISSIntg) :: NumberOfComputationalNodes,ComputationalNodeNumber,BoundaryNodeDomain
   INTEGER(CMISSIntg) :: EquationsSetIndex
   INTEGER(CMISSIntg) :: Err
-  
-#ifdef WIN32
-  !Initialise QuickWin
-  QUICKWIN_WINDOW_CONFIG%TITLE="General Output" !Window title
-  QUICKWIN_WINDOW_CONFIG%NUMTEXTROWS=-1 !Max possible number of rows
-  QUICKWIN_WINDOW_CONFIG%MODE=QWIN$SCROLLDOWN
-  !Set the window parameters
-  QUICKWIN_STATUS=SETWINDOWCONFIG(QUICKWIN_WINDOW_CONFIG)
-  !If attempt fails set with system estimated values
-  IF(.NOT.QUICKWIN_STATUS) QUICKWIN_STATUS=SETWINDOWCONFIG(QUICKWIN_WINDOW_CONFIG)
-#endif
 
   !
   !================================================================================================================================
@@ -243,7 +174,6 @@ PROGRAM STOKESDYNAMICEXAMPLE
   !INITIALISE OPENCMISS
 
   CALL cmfe_Initialise(WorldCoordinateSystem,WorldRegion,Err)
-
   CALL cmfe_ErrorHandlingModeSet(CMFE_ERRORS_TRAP_ERROR,Err)
 
   !
@@ -261,26 +191,18 @@ PROGRAM STOKESDYNAMICEXAMPLE
   !
 
   !PROBLEM CONTROL PANEL
+  NUMBER_GLOBAL_X_ELEMENTS=1
+  NUMBER_GLOBAL_Y_ELEMENTS=3
+  NUMBER_GLOBAL_Z_ELEMENTS=1
+  MESH_COMPONENT_NUMBER_SPACE=1
+  MESH_COMPONENT_NUMBER_VELOCITY=1
+  MESH_COMPONENT_NUMBER_PRESSURE=1
+  NUMBER_OF_DIMENSIONS=3
+  BASIS_TYPE=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  BASIS_XI_INTERPOLATION_SPACE=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  BASIS_XI_INTERPOLATION_VELOCITY=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  BASIS_XI_INTERPOLATION_PRESSURE=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
 
-  !Import cmHeart mesh information
-  CALL FLUID_MECHANICS_IO_READ_CMHEART(CM,Err)  
-
-  BASIS_NUMBER_SPACE=CM%ID_M
-  BASIS_NUMBER_VELOCITY=CM%ID_V
-  BASIS_NUMBER_PRESSURE=CM%ID_P
-  NUMBER_OF_DIMENSIONS=CM%D
-  BASIS_TYPE=CM%IT_T
-  BASIS_XI_INTERPOLATION_SPACE=CM%IT_M
-  BASIS_XI_INTERPOLATION_VELOCITY=CM%IT_V
-  BASIS_XI_INTERPOLATION_PRESSURE=CM%IT_P
-  NUMBER_OF_NODES_SPACE=CM%N_M
-  NUMBER_OF_NODES_VELOCITY=CM%N_V
-  NUMBER_OF_NODES_PRESSURE=CM%N_P
-  TOTAL_NUMBER_OF_NODES=CM%N_T
-  TOTAL_NUMBER_OF_ELEMENTS=CM%E_T
-  NUMBER_OF_ELEMENT_NODES_SPACE=CM%EN_M
-  NUMBER_OF_ELEMENT_NODES_VELOCITY=CM%EN_V
-  NUMBER_OF_ELEMENT_NODES_PRESSURE=CM%EN_P
   !Set initial values
   INITIAL_FIELD_STOKES(1)=0.0_CMISSRP
   INITIAL_FIELD_STOKES(2)=0.0_CMISSRP
@@ -289,17 +211,14 @@ PROGRAM STOKESDYNAMICEXAMPLE
   FIXED_WALL_NODES_STOKES_FLAG=.TRUE.
   INLET_WALL_NODES_STOKES_FLAG=.TRUE.
   IF(FIXED_WALL_NODES_STOKES_FLAG) THEN
-    NUMBER_OF_FIXED_WALL_NODES_STOKES=80
+    NUMBER_OF_FIXED_WALL_NODES_STOKES=1
     ALLOCATE(FIXED_WALL_NODES_STOKES(NUMBER_OF_FIXED_WALL_NODES_STOKES))
-    FIXED_WALL_NODES_STOKES=[1,2,3,4,5,7,9,10,11,12,13,14,17,20,24,28,29,30,31,32,33,34,35,37,39, & 
-    & 41,44,46,47,48,50,51,52,53,54,57,60,64,65,66,67,68,70,72,74,76,77,78,79,80,83,86, & 
-    & 89,90,91,92,93,94,95,97,99,101,102,103,104,105,106,107,108,111,114,115,116,117,118, & 
-    & 120,122,123,124,125]
+    FIXED_WALL_NODES_STOKES=[1]
   ENDIF
   IF(INLET_WALL_NODES_STOKES_FLAG) THEN
-    NUMBER_OF_INLET_WALL_NODES_STOKES=9
+    NUMBER_OF_INLET_WALL_NODES_STOKES=1
     ALLOCATE(INLET_WALL_NODES_STOKES(NUMBER_OF_INLET_WALL_NODES_STOKES))
-    INLET_WALL_NODES_STOKES=[6,15,16,23,36,42,81,82,96]
+    INLET_WALL_NODES_STOKES=[2]
     !Set initial boundary conditions
     BOUNDARY_CONDITIONS_STOKES(1)=0.0_CMISSRP
     BOUNDARY_CONDITIONS_STOKES(2)=1.0_CMISSRP
@@ -320,7 +239,7 @@ PROGRAM STOKESDYNAMICEXAMPLE
   EQUATIONS_STOKES_OUTPUT=CMFE_EQUATIONS_NO_OUTPUT
   !Set time parameter
   DYNAMIC_SOLVER_STOKES_START_TIME=0.0_CMISSRP
-  DYNAMIC_SOLVER_STOKES_STOP_TIME=5.0_CMISSRP 
+  DYNAMIC_SOLVER_STOKES_STOP_TIME=5.0_CMISSRP
   DYNAMIC_SOLVER_STOKES_TIME_INCREMENT=1.0_CMISSRP
   DYNAMIC_SOLVER_STOKES_THETA=1.0_CMISSRP
   !Set result output parameter
@@ -370,26 +289,26 @@ PROGRAM STOKESDYNAMICEXAMPLE
 
   !Start the creation of new bases
   MESH_NUMBER_OF_COMPONENTS=1
-  CALL cmfe_Basis_Initialise(BasisSpace,Err)
-  CALL cmfe_Basis_CreateStart(BASIS_NUMBER_SPACE,BasisSpace,Err)
+  CALL cmfe_Basis_Initialise(BasisGeometry,Err)
+  CALL cmfe_Basis_CreateStart(BASIS_NUMBER_SPACE,BasisGeometry,Err)
   !Set the basis type (Lagrange/Simplex)
-  CALL cmfe_Basis_TypeSet(BasisSpace,BASIS_TYPE,Err)
+  CALL cmfe_Basis_TypeSet(BasisGeometry,BASIS_TYPE,Err)
   !Set the basis xi number
-  CALL cmfe_Basis_NumberOfXiSet(BasisSpace,NUMBER_OF_DIMENSIONS,Err)
+  CALL cmfe_Basis_NumberOfXiSet(BasisGeometry,NUMBER_OF_DIMENSIONS,Err)
   !Set the basis xi interpolation and number of Gauss points
   IF(NUMBER_OF_DIMENSIONS==2) THEN
-    CALL cmfe_Basis_InterpolationXiSet(BasisSpace,[BASIS_XI_INTERPOLATION_SPACE,BASIS_XI_INTERPOLATION_SPACE],Err)
-    CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisSpace,[BASIS_XI_GAUSS_SPACE,BASIS_XI_GAUSS_SPACE],Err)
+    CALL cmfe_Basis_InterpolationXiSet(BasisGeometry,[BASIS_XI_INTERPOLATION_SPACE,BASIS_XI_INTERPOLATION_SPACE],Err)
+    CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisGeometry,[BASIS_XI_GAUSS_SPACE,BASIS_XI_GAUSS_SPACE],Err)
   ELSE IF(NUMBER_OF_DIMENSIONS==3) THEN
-    CALL cmfe_Basis_InterpolationXiSet(BasisSpace,[BASIS_XI_INTERPOLATION_SPACE,BASIS_XI_INTERPOLATION_SPACE, & 
-      & BASIS_XI_INTERPOLATION_SPACE],Err)                         
-    CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisSpace,[BASIS_XI_GAUSS_SPACE,BASIS_XI_GAUSS_SPACE,BASIS_XI_GAUSS_SPACE],Err)
+    CALL cmfe_Basis_InterpolationXiSet(BasisGeometry,[BASIS_XI_INTERPOLATION_SPACE,BASIS_XI_INTERPOLATION_SPACE, &
+      & BASIS_XI_INTERPOLATION_SPACE],Err)
+    CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisGeometry,[BASIS_XI_GAUSS_SPACE,BASIS_XI_GAUSS_SPACE,BASIS_XI_GAUSS_SPACE],Err)
   ENDIF
   !Finish the creation of the basis
-  CALL cmfe_Basis_CreateFinish(BasisSpace,Err)
+  CALL cmfe_Basis_CreateFinish(BasisGeometry,Err)
   !Start the creation of another basis
   IF(BASIS_XI_INTERPOLATION_VELOCITY==BASIS_XI_INTERPOLATION_SPACE) THEN
-    BasisVelocity=BasisSpace
+    BasisVelocity=BasisGeometry
   ELSE
     MESH_NUMBER_OF_COMPONENTS=MESH_NUMBER_OF_COMPONENTS+1
     !Initialise a new velocity basis
@@ -405,9 +324,9 @@ PROGRAM STOKESDYNAMICEXAMPLE
       CALL cmfe_Basis_InterpolationXiSet(BasisVelocity,[BASIS_XI_INTERPOLATION_VELOCITY,BASIS_XI_INTERPOLATION_VELOCITY],Err)
       CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY],Err)
     ELSE IF(NUMBER_OF_DIMENSIONS==3) THEN
-      CALL cmfe_Basis_InterpolationXiSet(BasisVelocity,[BASIS_XI_INTERPOLATION_VELOCITY,BASIS_XI_INTERPOLATION_VELOCITY, & 
-        & BASIS_XI_INTERPOLATION_VELOCITY],Err)                         
-      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY, & 
+      CALL cmfe_Basis_InterpolationXiSet(BasisVelocity,[BASIS_XI_INTERPOLATION_VELOCITY,BASIS_XI_INTERPOLATION_VELOCITY, &
+        & BASIS_XI_INTERPOLATION_VELOCITY],Err)
+      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY, &
         & BASIS_XI_GAUSS_VELOCITY],Err)
     ENDIF
     !Finish the creation of the basis
@@ -415,7 +334,7 @@ PROGRAM STOKESDYNAMICEXAMPLE
   ENDIF
   !Start the creation of another basis
   IF(BASIS_XI_INTERPOLATION_PRESSURE==BASIS_XI_INTERPOLATION_SPACE) THEN
-    BasisPressure=BasisSpace
+    BasisPressure=BasisGeometry
   ELSE IF(BASIS_XI_INTERPOLATION_PRESSURE==BASIS_XI_INTERPOLATION_VELOCITY) THEN
     BasisPressure=BasisVelocity
   ELSE
@@ -433,9 +352,9 @@ PROGRAM STOKESDYNAMICEXAMPLE
       CALL cmfe_Basis_InterpolationXiSet(BasisPressure,[BASIS_XI_INTERPOLATION_PRESSURE,BASIS_XI_INTERPOLATION_PRESSURE],Err)
       CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE],Err)
     ELSE IF(NUMBER_OF_DIMENSIONS==3) THEN
-      CALL cmfe_Basis_InterpolationXiSet(BasisPressure,[BASIS_XI_INTERPOLATION_PRESSURE,BASIS_XI_INTERPOLATION_PRESSURE, & 
-        & BASIS_XI_INTERPOLATION_PRESSURE],Err)                         
-      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE, & 
+      CALL cmfe_Basis_InterpolationXiSet(BasisPressure,[BASIS_XI_INTERPOLATION_PRESSURE,BASIS_XI_INTERPOLATION_PRESSURE, &
+        & BASIS_XI_INTERPOLATION_PRESSURE],Err)
+      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE, &
         & BASIS_XI_GAUSS_PRESSURE],Err)
     ENDIF
     !Finish the creation of the basis
@@ -448,59 +367,20 @@ PROGRAM STOKESDYNAMICEXAMPLE
 
   !MESH
 
-  !Start the creation of mesh nodes
-  CALL cmfe_Nodes_Initialise(Nodes,Err)
+  !Start the creation of a generated mesh in the region
+  CALL cmfe_GeneratedMesh_Initialise(GeneratedMesh,Err)
+  CALL cmfe_GeneratedMesh_CreateStart(GeneratedMeshUserNumber,Region,GeneratedMesh,Err)
+  !Set up a regular x*y*z mesh
+  CALL cmfe_GeneratedMesh_TypeSet(GeneratedMesh,CMFE_GENERATED_MESH_REGULAR_MESH_TYPE,Err)
+  !Set the default basis
+  CALL cmfe_GeneratedMesh_BasisSet(GeneratedMesh,BasisGeometry,Err)
+  !Define the mesh on the region
+  CALL cmfe_GeneratedMesh_ExtentSet(GeneratedMesh,[WIDTH,HEIGHT,LENGTH],Err)
+  CALL cmfe_GeneratedMesh_NumberOfElementsSet(GeneratedMesh,[NUMBER_GLOBAL_X_ELEMENTS,NUMBER_GLOBAL_Y_ELEMENTS, &
+      & NUMBER_GLOBAL_Z_ELEMENTS],Err)
+  !Finish the creation of a generated mesh in the region
   CALL cmfe_Mesh_Initialise(Mesh,Err)
-  CALL cmfe_Nodes_CreateStart(Region,TOTAL_NUMBER_OF_NODES,Nodes,Err)
-  CALL cmfe_Nodes_CreateFinish(Nodes,Err)
-  !Start the creation of the mesh
-  CALL cmfe_Mesh_CreateStart(MeshUserNumber,Region,NUMBER_OF_DIMENSIONS,Mesh,Err)
-  !Set number of mesh elements
-  CALL cmfe_Mesh_NumberOfElementsSet(Mesh,TOTAL_NUMBER_OF_ELEMENTS,Err)
-  !Set number of mesh components
-  CALL cmfe_Mesh_NumberOfComponentsSet(Mesh,MESH_NUMBER_OF_COMPONENTS,Err)
-  !Specify spatial mesh component
-  CALL cmfe_MeshElements_Initialise(MeshElementsSpace,Err)
-  CALL cmfe_MeshElements_Initialise(MeshElementsVelocity,Err)
-  CALL cmfe_MeshElements_Initialise(MeshElementsPressure,Err)
-  MESH_COMPONENT_NUMBER_SPACE=1
-  MESH_COMPONENT_NUMBER_VELOCITY=1
-  MESH_COMPONENT_NUMBER_PRESSURE=1
-  CALL cmfe_MeshElements_CreateStart(Mesh,MESH_COMPONENT_NUMBER_SPACE,BasisSpace,MeshElementsSpace,Err)
-  DO ELEMENT_NUMBER=1,TOTAL_NUMBER_OF_ELEMENTS
-    CALL cmfe_MeshElements_NodesSet(MeshElementsSpace,ELEMENT_NUMBER,CM%M(ELEMENT_NUMBER,1:NUMBER_OF_ELEMENT_NODES_SPACE),Err)
-  ENDDO
-  CALL cmfe_MeshElements_CreateFinish(MeshElementsSpace,Err)
-  !Specify velocity mesh component
-  IF(BASIS_XI_INTERPOLATION_VELOCITY==BASIS_XI_INTERPOLATION_SPACE) THEN
-    MeshElementsVelocity=MeshElementsSpace
-  ELSE
-    MESH_COMPONENT_NUMBER_VELOCITY=MESH_COMPONENT_NUMBER_SPACE+1
-    CALL cmfe_MeshElements_CreateStart(Mesh,MESH_COMPONENT_NUMBER_VELOCITY,BasisVelocity,MeshElementsVelocity,Err)
-    DO ELEMENT_NUMBER=1,TOTAL_NUMBER_OF_ELEMENTS
-      CALL cmfe_MeshElements_NodesSet(MeshElementsVelocity,ELEMENT_NUMBER,CM%V(ELEMENT_NUMBER, & 
-        & 1:NUMBER_OF_ELEMENT_NODES_VELOCITY),Err)
-    ENDDO
-    CALL cmfe_MeshElements_CreateFinish(MeshElementsVelocity,Err)
-  ENDIF
-  !Specify pressure mesh component
-  IF(BASIS_XI_INTERPOLATION_PRESSURE==BASIS_XI_INTERPOLATION_SPACE) THEN
-    MeshElementsPressure=MeshElementsSpace
-    MESH_COMPONENT_NUMBER_PRESSURE=MESH_COMPONENT_NUMBER_SPACE
-  ELSE IF(BASIS_XI_INTERPOLATION_PRESSURE==BASIS_XI_INTERPOLATION_VELOCITY) THEN
-    MeshElementsPressure=MeshElementsVelocity
-    MESH_COMPONENT_NUMBER_PRESSURE=MESH_COMPONENT_NUMBER_VELOCITY
-  ELSE
-    MESH_COMPONENT_NUMBER_PRESSURE=MESH_COMPONENT_NUMBER_VELOCITY+1
-    CALL cmfe_MeshElements_CreateStart(Mesh,MESH_COMPONENT_NUMBER_PRESSURE,BasisPressure,MeshElementsPressure,Err)
-    DO ELEMENT_NUMBER=1,TOTAL_NUMBER_OF_ELEMENTS
-      CALL cmfe_MeshElements_NodesSet(MeshElementsPressure,ELEMENT_NUMBER,CM%P(ELEMENT_NUMBER, & 
-        & 1:NUMBER_OF_ELEMENT_NODES_PRESSURE),Err)
-    ENDDO
-    CALL cmfe_MeshElements_CreateFinish(MeshElementsPressure,Err)
-  ENDIF
-  !Finish the creation of the mesh
-  CALL cmfe_Mesh_CreateFinish(Mesh,Err)
+  CALL cmfe_GeneratedMesh_CreateFinish(GeneratedMesh,MeshUserNumber,Mesh,Err)
 
   !
   !================================================================================================================================
@@ -527,27 +407,18 @@ PROGRAM STOKESDYNAMICEXAMPLE
   !Set the scaling to use
   CALL cmfe_Field_ScalingTypeSet(GeometricField,CMFE_FIELD_NO_SCALING,Err)
   !Set the mesh component to be used by the field components.
-  DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-    CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
-      & MESH_COMPONENT_NUMBER_SPACE,Err)
-  ENDDO
+  !DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
+  !  CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
+  !    & MESH_COMPONENT_NUMBER_SPACE,Err)
+  !ENDDO
+  CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,1,1,Err)
+  CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,2,1,Err)
+  CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,3,1,Err)
   !Finish creating the field
   CALL cmfe_Field_CreateFinish(GeometricField,Err)
-  !Update the geometric field parameters
-  DO NODE_NUMBER=1,NUMBER_OF_NODES_SPACE
-    DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-      VALUE=CM%N(NODE_NUMBER,COMPONENT_NUMBER)
-      CALL cmfe_Decomposition_NodeDomainGet(Decomposition,NODE_NUMBER,1,BoundaryNodeDomain,Err)
-      IF(BoundaryNodeDomain==ComputationalNodeNumber) THEN
-        CALL cmfe_Field_ParameterSetUpdateNode(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
-          & 1,CMFE_NO_GLOBAL_DERIV,NODE_NUMBER,COMPONENT_NUMBER,VALUE,Err)
-      ENDIF
-    ENDDO
-  ENDDO
+
   CALL cmfe_Field_ParameterSetUpdateStart(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,Err)
   CALL cmfe_Field_ParameterSetUpdateFinish(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,Err)
-
-
 
   !
   !================================================================================================================================
@@ -557,15 +428,14 @@ PROGRAM STOKESDYNAMICEXAMPLE
 
   !Create the equations set for dynamic Stokes
   CALL cmfe_EquationsSet_Initialise(EquationsSetStokes,Err)
-    CALL cmfe_Field_Initialise(EquationsSetField,Err)
-CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,GeometricField,[CMFE_EQUATIONS_SET_FLUID_MECHANICS_CLASS, &
-  & CMFE_EQUATIONS_SET_STOKES_EQUATION_TYPE,CMFE_EQUATIONS_SET_TRANSIENT_STOKES_SUBTYPE],EquationsSetFieldUserNumber, &
-  & EquationsSetField,EquationsSetStokes,Err)
+  CALL cmfe_Field_Initialise(EquationsSetField,Err)
+  CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,GeometricField,[CMFE_EQUATIONS_SET_FLUID_MECHANICS_CLASS, &
+    & CMFE_EQUATIONS_SET_STOKES_EQUATION_TYPE,CMFE_EQUATIONS_SET_TRANSIENT_STOKES_SUBTYPE],EquationsSetFieldUserNumber, &
+    & EquationsSetField,EquationsSetStokes,Err)
   !Set the equations set to be a dynamic Stokes problem
-  
+
   !Finish creating the equations set
   CALL cmfe_EquationsSet_CreateFinish(EquationsSetStokes,Err)
-
 
   !
   !================================================================================================================================
@@ -575,26 +445,26 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
 
   !Create the equations set dependent field variables for dynamic Stokes
   CALL cmfe_Field_Initialise(DependentFieldStokes,Err)
-  CALL cmfe_EquationsSet_DependentCreateStart(EquationsSetStokes,DependentFieldUserNumberStokes, & 
+  CALL cmfe_EquationsSet_DependentCreateStart(EquationsSetStokes,DependentFieldUserNumberStokes, &
     & DependentFieldStokes,Err)
   !Set the mesh component to be used by the field components.
   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_VELOCITY,Err)
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_VELOCITY,Err)
   ENDDO
   COMPONENT_NUMBER=NUMBER_OF_DIMENSIONS+1
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_PRESSURE,Err)
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldStokes,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_PRESSURE,Err)
   !Finish the equations set dependent field variables
   CALL cmfe_EquationsSet_DependentCreateFinish(EquationsSetStokes,Err)
 
   !Initialise dependent field
   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-    CALL cmfe_Field_ComponentValuesInitialise(DependentFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+    CALL cmfe_Field_ComponentValuesInitialise(DependentFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
       & COMPONENT_NUMBER,INITIAL_FIELD_STOKES(COMPONENT_NUMBER),Err)
   ENDDO
 
@@ -607,13 +477,13 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
 
   !Create the equations set materials field variables for dynamic Stokes
   CALL cmfe_Field_Initialise(MaterialsFieldStokes,Err)
-  CALL cmfe_EquationsSet_MaterialsCreateStart(EquationsSetStokes,MaterialsFieldUserNumberStokes, & 
+  CALL cmfe_EquationsSet_MaterialsCreateStart(EquationsSetStokes,MaterialsFieldUserNumberStokes, &
     & MaterialsFieldStokes,Err)
   !Finish the equations set materials field variables
   CALL cmfe_EquationsSet_MaterialsCreateFinish(EquationsSetStokes,Err)
-  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
     & MaterialsFieldUserNumberStokesMu,MU_PARAM_STOKES,Err)
-  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldStokes,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
     & MaterialsFieldUserNumberStokesRho,RHO_PARAM_STOKES,Err)
 
   !
@@ -621,7 +491,6 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
   !
 
   !EQUATIONS
-
 
   !Create the equations set equations
   CALL cmfe_Equations_Initialise(EquationsStokes,Err)
@@ -634,7 +503,6 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
   CALL cmfe_Equations_OutputTypeSet(EquationsStokes,EQUATIONS_STOKES_OUTPUT,Err)
   !Finish the equations set equations
   CALL cmfe_EquationsSet_EquationsCreateFinish(EquationsSetStokes,Err)
-
 
   !
   !================================================================================================================================
@@ -654,7 +522,7 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
   !Get the control loop
   CALL cmfe_Problem_ControlLoopGet(Problem,CMFE_CONTROL_LOOP_NODE,ControlLoop,Err)
   !Set the times
-  CALL cmfe_ControlLoop_TimesSet(ControlLoop,DYNAMIC_SOLVER_STOKES_START_TIME,DYNAMIC_SOLVER_STOKES_STOP_TIME, & 
+  CALL cmfe_ControlLoop_TimesSet(ControlLoop,DYNAMIC_SOLVER_STOKES_START_TIME,DYNAMIC_SOLVER_STOKES_STOP_TIME, &
     & DYNAMIC_SOLVER_STOKES_TIME_INCREMENT,Err)
   !Set the output timing
   CALL cmfe_ControlLoop_TimeOutputSet(ControlLoop,DYNAMIC_SOLVER_STOKES_OUTPUT_FREQUENCY,Err)
@@ -677,7 +545,6 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
   CALL cmfe_Solver_OutputTypeSet(DynamicSolverStokes,DYNAMIC_SOLVER_STOKES_OUTPUT_TYPE,Err)
   !Set theta
   CALL cmfe_Solver_DynamicThetaSet(DynamicSolverStokes,DYNAMIC_SOLVER_STOKES_THETA,Err)
-!   CALL cmfe_SolverDynamicDynamicSet(DynamicSolverStokes,.TRUE.,Err)
   !Get the dynamic linear solver
   CALL cmfe_Solver_DynamicLinearSolverGet(DynamicSolverStokes,LinearSolverStokes,Err)
   !Set the output type
@@ -792,12 +659,10 @@ CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberStokes,Region,Geometric
     CALL cmfe_Fields_Finalise(Fields,Err)
     WRITE(*,'(A)') "Field exported!"
   ENDIF
-  
-  !Finialise CMISS
-!   CALL cmfe_Finalise(Err)
 
+  !Finialise CMISS
+  CALL cmfe_Finalise(Err)
   WRITE(*,'(A)') "Program successfully completed."
-  
   STOP
 
 END PROGRAM STOKESDYNAMICEXAMPLE
